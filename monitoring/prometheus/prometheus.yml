@@ -48,11 +48,13 @@ scrape_configs:
 
   # API Application (when deployed)
   - job_name: 'api-prod'
+    params:
+      module: ['health-module']
+      target: ['http://api-prod:3000/health']
     static_configs:
-      - targets: ['api-prod:3000']
+     - targets: ['json-exporter:7979']
     scrape_interval: 15s
-    metrics_path: /metrics
-    scrape_timeout: 10s
+    metrics_path: /probe
 
   # Grafana metrics
   - job_name: 'grafana'

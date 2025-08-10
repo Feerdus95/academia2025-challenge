@@ -139,6 +139,19 @@ services:
     depends_on:
       - loki
 
+  # Json Exporter
+  json-exporter:
+    image: prometheuscommunity/json-exporter:latest
+    container_name: json-exporter
+    ports:
+      - "7979:7979"
+    volumes:
+      - ./json-exporter/config.yml:/config.json
+    command:
+      - '--config.file=/config.json'
+    networks:
+      - monitoring
+
 volumes:
   prometheus_data:
     driver: local

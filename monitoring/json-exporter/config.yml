@@ -1,0 +1,9 @@
+modules:
+  health-module:
+    metrics:
+      - name: api_health_status
+        path: '{.status}'
+        help: "API health status (1=ok, 0=fail)"
+        type: gauge
+        labels:
+          service: api-prod
