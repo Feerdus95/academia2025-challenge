@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: academia2025_prod
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /opt/docker/postgres/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - infrastructure
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d academia2025_prod"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  api-application:
+    image: feerdus95/academia2025-challenge:latest
+    container_name: api-prod
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=academia2025_prod
+      - DB_USER=postgres
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - PORT=3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - infrastructure
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  infrastructure:
+    driver: bridge
+    external: true

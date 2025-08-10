@@ -1,0 +1,69 @@
+# Prometheus Configuration for Academia Novit Challenge
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'academia-novit'
+    environment: 'production'
+
+# Load alerting rules
+rule_files:
+  - "alerts.yml"
+
+# Alertmanager configuration (opcional - para email notifications)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Scrape configuration
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['prometheus:9090']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Node Exporter - System metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # cAdvisor - Container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # PostgreSQL Exporter
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # API Application (when deployed)
+  - job_name: 'api-prod'
+    static_configs:
+      - targets: ['api-prod:3000']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  # Grafana metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    scrape_interval: 30s
+    metrics_path: /grafana/metrics
+
+  # Loki metrics
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+    scrape_interval: 30s
+    metrics_path: /metrics

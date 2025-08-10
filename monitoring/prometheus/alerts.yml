@@ -1,0 +1,162 @@
+# Prometheus Alerting Rules for Academia Novit Challenge
+groups:
+  # API Performance Alerts
+  - name: api_performance
+    rules:
+      # API response time > 2 segundos
+      - alert: APIHighResponseTime
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="api-application"}[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API response time is too high"
+          description: "API 95th percentile response time is {{ $value }}s for more than 5 minutes."
+
+      # Error rate > 5% en 5 minutos
+      - alert: APIHighErrorRate
+        expr: (sum(rate(http_requests_total{job="api-application",code=~"5.."}[5m])) / sum(rate(http_requests_total{job="api-application"}[5m]))) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "High API error rate detected"
+          description: "API error rate is {{ $value }}% for more than 5 minutes."
+
+  # System Resource Alerts
+  - name: system_resources
+    rules:
+      # CPU usage > 80% por 10 minutos
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }} for more than 10 minutes."
+
+      # Memory usage > 90% por 5 minutos
+      - alert: HighMemoryUsage
+        expr: ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }} for more than 5 minutes."
+
+      # Disk space < 10% disponible
+      - alert: LowDiskSpace
+        expr: ((node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes) * 100 > 90
+        for: 1m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Low disk space detected"
+          description: "Disk usage is {{ $value }}% on {{ $labels.instance }} {{ $labels.mountpoint }}."
+
+  # Database Alerts
+  - name: database
+    rules:
+      # PostgreSQL connections > 80% del límite
+      - alert: PostgreSQLHighConnections
+        expr: (pg_stat_database_numbackends / pg_settings_max_connections) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "PostgreSQL connection usage is high"
+          description: "PostgreSQL is using {{ $value }}% of available connections."
+
+      # PostgreSQL down
+      - alert: PostgreSQLDown
+        expr: pg_up != 1
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database is not responding."
+
+  # Security Alerts
+  - name: security
+    rules:
+      # Failed logins > 10 en 5 minutos
+      - alert: HighFailedLogins
+        expr: increase(http_requests_total{job="api-application",endpoint="/auth/login",code="401"}[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "High number of failed login attempts"
+          description: "{{ $value }} failed login attempts detected in the last 5 minutes."
+
+      # High 4xx error rate
+      - alert: High4xxErrorRate
+        expr: (sum(rate(http_requests_total{job="api-application",code=~"4.."}[5m])) / sum(rate(http_requests_total{job="api-application"}[5m]))) * 100 > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "High 4xx error rate"
+          description: "4xx error rate is {{ $value }}% for more than 5 minutes."
+
+  # Container and Docker Alerts
+  - name: containers
+    rules:
+      # Container down
+      - alert: ContainerDown
+        expr: up{job=~"cadvisor|node-exporter|postgres-exporter"} != 1
+        for: 5m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Container is down"
+          description: "Container {{ $labels.job }} on {{ $labels.instance }} has been down for more than 5 minutes."
+
+      # High container memory usage
+      - alert: ContainerHighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          component: containers
+        annotations:
+          summary: "Container high memory usage"
+          description: "Container {{ $labels.name }} is using {{ $value }}% of its memory limit."
+
+      # High container CPU usage
+      - alert: ContainerHighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: containers
+        annotations:
+          summary: "Container high CPU usage"
+          description: "Container {{ $labels.name }} is using {{ $value }}% CPU for more than 10 minutes."
+
+  # Network and Connectivity
+  - name: network
+    rules:
+      # High network traffic
+      - alert: HighNetworkTraffic
+        expr: rate(node_network_receive_bytes_total[5m]) + rate(node_network_transmit_bytes_total[5m]) > 100000000  # 100MB/s
+        for: 10m
+        labels:
+          severity: warning
+          component: network
+        annotations:
+          summary: "High network traffic"
+          description: "Network traffic on {{ $labels.instance }} {{ $labels.device }} is {{ $value }} bytes/s."
