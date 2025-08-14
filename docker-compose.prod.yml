@@ -47,8 +47,6 @@ services:
         delay: 10s
       restart_policy:
         condition: on-failure
-      placement:
-        constraints: [node.role == worker]
       resources:
         limits:
           cpus: '0.50'
