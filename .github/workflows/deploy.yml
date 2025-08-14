@@ -82,9 +82,9 @@ jobs:
       - name: Deploy with Docker Swarm
         id: deploy
         run: |
-          # Copy all necessary configuration directories to the remote host
+          # Copy all necessary configuration directories to the remote host, using the correct source paths
           scp -P ${{ env.REMOTE_PORT }} -r postgres/ ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/
-          scp -P ${{ env.REMOTE_PORT }} -r nginx/ ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/
+          scp -P ${{ env.REMOTE_PORT }} -r etc/nginx/ ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/nginx
           scp -P ${{ env.REMOTE_PORT }} -r monitoring/ ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/
 
           # Copy the main production compose file to the remote server
