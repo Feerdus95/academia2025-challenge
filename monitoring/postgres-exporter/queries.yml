@@ -1,0 +1,37 @@
+ pg_database:
+      query: "SELECT d.datname, d.datistemplate, d.datallowconn, pg_database_size(d.datname) as datsize, age(d.datfrozenxid) as datfrozenxid_age FROM pg_database d"
+      metrics:
+        - datname:
+            usage: "LABEL"
+            description: "Name of the database"
+        - datistemplate:
+            usage: "LABEL"
+            description: "Is the database a template"
+        - datallowconn:
+            usage: "LABEL"
+            description: "Can connect to the database"
+        - datsize:
+            usage: "GAUGE"
+            description: "Size of the database in bytes"
+        - datfrozenxid_age:
+            usage: "GAUGE"
+            description: "Age of the frozen XID"
+
+    pg_settings:
+      query: "SELECT name, setting, unit, short_desc, source FROM pg_settings"
+      metrics:
+        - name:
+            usage: "LABEL"
+            description: "Name of the setting"
+        - setting:
+            usage: "GAUGE"
+            description: "Value of the setting"
+        - unit:
+            usage: "LABEL"
+            description: "Unit of the setting"
+        - short_desc:
+            usage: "LABEL"
+            description: "Short description of the setting"
+        - source:
+            usage: "LABEL"
+            description: "Source of the setting"

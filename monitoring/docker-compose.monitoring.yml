@@ -25,6 +25,7 @@ services:
     depends_on:
       - cadvisor
       - node-exporter
+      - promtail
 
   # Grafana - Visualización y Dashboards
   grafana:
@@ -98,13 +99,15 @@ services:
     restart: unless-stopped
     ports:
       - "9187:9187"
+    volumes:
+      - ./postgres-exporter/queries.yml:/etc/postgres-exporter/queries.yml
+    command:
+      - --extend.query-path=/etc/postgres-exporter/queries.yml
     environment:
       - DATA_SOURCE_NAME=postgresql://postgres:${POSTGRES_PASSWORD}@postgres-prod:5432/academia2025_prod?sslmode=disable
     networks:
       - infrastructure
       - monitoring
-    extra_hosts:
-      - "postgres-prod:172.20.0.2"
     depends_on:
       - prometheus
 
@@ -132,6 +135,7 @@ services:
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/docker/monitoring/api-logs:/opt/docker/monitoring/api-logs:ro
       - ./promtail/data:/positions
     command: -config.file=/etc/promtail/config.yml
     networks:

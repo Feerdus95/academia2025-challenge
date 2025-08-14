@@ -41,13 +41,20 @@ scrape_configs:
           __path__: /var/log/nginx/api_access.log
     pipeline_stages:
       - regex:
-          expression: '^(?P<remote_addr>[\d\.]+) - (?P<remote_user>\S+) \[(?P<time_local>[^\]]+)\] "(?P<method>\S+) (?P<request_uri>\S+) (?P<server_protocol>\S+)" (?P<status>\d+) (?P<bytes_sent>\d+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>[^"]*)"'
+          expression: '^(?P<remote_addr>\S+) - - \[(?P<timestamp>[^\]]+)\] "(?P<method>\S+)\s(?P<request_uri>\S+)\s\S+" (?P<status>\d{3}) (?P<bytes_sent>\d+) "[^"]*" "[^"]*" rt=(?P<request_time>\S+)'
       - labels:
           remote_addr:
           method:
-          request_uri:
           status:
+          path:
           bytes_sent:
+      - metrics:
+          request_duration_seconds:
+            type: Histogram
+            description: "Request duration in seconds."
+            source: request_time
+            config:
+              buckets: [0.1, 0.5, 1, 2.5, 5]
 
   - job_name: nginx-error
     static_configs:
@@ -81,37 +88,57 @@ scrape_configs:
       - output:
           source: output
 
-  # API Application logs (when containerized)
+  # Json Exporter Logs
+  - job_name: json-exporter-logs
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/json-exporter'
+        target_label: job
+        replacement: 'json-exporter'
+    pipeline_stages:
+      - logfmt:
+          mapping:
+            level: level
+            msg: msg
+
+    # API Application logs (when containerized)
   - job_name: api-application
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
     relabel_configs:
       - source_labels: ['__meta_docker_container_name']
-        regex: '/api-.*'
-        target_label: __service__
-      - source_labels: ['__meta_docker_container_name']
-        target_label: container_name
-      - source_labels: ['__meta_docker_container_id']
-        target_label: container_id
-      - source_labels: [__service__]
+        regex: '/?(api-.*|.*api.*)'
         target_label: job
         replacement: 'api-application'
+      - source_labels: ['__meta_docker_container_name']
+        target_label: container_name
     pipeline_stages:
       - json:
           expressions:
+            output: log
+            stream: stream
+            time: time
+      - json:
+          source: output
+          expressions:
+            timestamp: timestamp
             level: level
             message: message
-            timestamp: timestamp
             method: method
             url: url
-            status: status
-            response_time: response_time
-            user_id: user_id
+            statusCode: statusCode
+            responseTime: responseTime
+            userId: userId
+            ip: ip
       - labels:
           level:
           method:
-          status:
+          statusCode:
+          container_name:
       - timestamp:
           source: timestamp
           format: RFC3339
@@ -169,6 +196,46 @@ scrape_configs:
       - source_labels: [__service__]
         target_label: job
         replacement: 'prometheus'
+
+  # API Application logs from files
+  - job_name: api-application-files
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: api-application
+          host: academia-novit
+          service: api-prod
+          __path__: /opt/docker/monitoring/api-logs/*.log
+    pipeline_stages:
+      # Format parsing: "2025-08-11 10:45:20 [HTTP]: HTTP Request | {json}"
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})
+$$
+(?P<level>\w+)
+$$: (?P<message>[^|]+) \| (?P<json_data>\{.*\})'
+      # Parsear el JSON
+      - json:
+          source: json_data
+          expressions:
+            service: service
+            method: method
+            url: url
+            statusCode: statusCode
+            duration: duration
+            ip: ip
+            userId: userId
+            type: type
+      # Crear labels para filtrar
+      - labels:
+          level:
+          method:
+          statusCode:
+          type:
+      # Usar timestamp del log
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05'
 
 # Limits to prevent excessive resource usage
 limits_config:
