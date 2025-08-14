@@ -12,8 +12,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/api.conf:/etc/nginx/conf.d/api.conf
-      - ./nginx/ssl:/etc/nginx/ssl # Para los certificados SSL
+      - /home/deploy/nginx/api.conf:/etc/nginx/conf.d/api.conf
+      - /home/deploy/nginx/ssl:/etc/nginx/ssl # Para los certificados SSL
     networks:
       - app-net
     deploy:
@@ -67,7 +67,7 @@ services:
       - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d
+      - ./home/deploy/postgres/init:/docker-entrypoint-initdb.d
     deploy:
       restart_policy:
         condition: on-failure
