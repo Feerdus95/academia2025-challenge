@@ -1,6 +1,9 @@
+# Workflow name
 name: Deploy to Production
 
+# Triggers for the workflow
 on:
+  # Allows manual triggering from the GitHub UI
   workflow_dispatch:
     inputs:
       environment:
@@ -11,11 +14,13 @@ on:
         options:
           - staging
           - production
+  # Triggers automatically after the "Build and Push" workflow completes successfully on the main branch
   workflow_run:
     workflows: ["Build and Push"]
     branches: [main]
     types: [completed]
 
+# Environment variables available to all jobs in the workflow
 env:
   SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
   REMOTE_USER: ${{ secrets.REMOTE_USER }}
@@ -26,47 +31,79 @@ env:
 
 jobs:
   deploy:
+    # Job name, dynamically set based on the trigger input
     name: Deploy to ${{ inputs.environment || 'production' }}
     runs-on: ubuntu-latest
+    # Condition to run the job only if the triggering workflow was successful or if it was manually dispatched
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
     steps:
+      # Step 1: Check out the repository code
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # Step 2: Configure SSH agent with the private key
       - name: Configure SSH
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ env.SSH_KEY }}
 
+      # Step 3: Add the remote server's host key to known_hosts to avoid interactive prompts
       - name: Add known hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H -p ${{ env.REMOTE_PORT }} ${{ env.REMOTE_HOST }} >> ~/.ssh/known_hosts
 
+      # Step 4: Log in to Docker Hub on the remote server
       - name: Login to Docker Hub on remote
         run: |
           ssh -p ${{ env.REMOTE_PORT }} ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }} \
             "echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin"
 
+      # Step 5: Prepare secrets and environment files before deployment
+      - name: Prepare deployment environment
+        run: |
+          # Create the secrets directory
+          mkdir -p secrets
+          # Create the postgres_password.txt file from a GitHub secret
+          echo "${{ secrets.POSTGRES_PASSWORD }}" > secrets/postgres_password.txt
+
+          # Create an environment file for Grafana variables
+          # This is a cleaner way to pass multiple variables to the remote host
+          cat << EOF > .env.prod
+          GF_SECURITY_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GF_SERVER_ROOT_URL=${{ secrets.GF_SERVER_ROOT_URL }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          EOF
+
+      # Step 6: Deploy the stack using Docker Swarm
       - name: Deploy with Docker Swarm
         id: deploy
         run: |
-          # Copy docker-compose.prod.yml to remote
+          # Copy the main production compose file to the remote server
           scp -P ${{ env.REMOTE_PORT }} docker-compose.prod.yml ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/
 
-          # Copy secrets directory
+          # Copy the newly created secrets directory to the remote server
           scp -P ${{ env.REMOTE_PORT }} -r secrets/ ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/
 
-          # Deploy/update the stack
+          # Copy the production environment file to the remote server
+          scp -P ${{ env.REMOTE_PORT }} .env.prod ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/
+
+          # Connect to the remote server and execute deployment commands
           ssh -p ${{ env.REMOTE_PORT }} ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }} << 'EOF'
-            # Pull the latest image
+            # Pull the latest version of the application image
             docker pull ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
             
-            # Deploy the stack
+            # Source the environment file to load variables into the shell session
+            export $(cat .env.prod | xargs)
+            
+            # Deploy or update the stack, using the compose file and passing registry credentials
             docker stack deploy -c docker-compose.prod.yml academia2025 --with-registry-auth --prune
           EOF
 
+      # Step 7: Verify that the deployment was successful
       - name: Verify deployment
         id: verify
         run: |
@@ -76,9 +113,9 @@ jobs:
             RETRY_COUNT=0
             
             while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              # Check if all replicas are running
-              RUNNING_REPLICAS=$(docker service ls --filter name=academia2025_api --format "{{.Replicas}}" | cut -d'/' -f1)
-              DESIRED_REPLICAS=$(docker service ls --filter name=academia2025_api --format "{{.Replicas}}" | cut -d'/' -f2)
+              # Check if the running replicas match the desired number of replicas for the API service
+              RUNNING_REPLICAS=$(docker service ls --filter name=academia2025_api-application --format "{{.Replicas}}" | cut -d'/' -f1)
+              DESIRED_REPLICAS=$(docker service ls --filter name=academia2025_api-application --format "{{.Replicas}}" | cut -d'/' -f2)
               
               if [ "$RUNNING_REPLICAS" = "$DESIRED_REPLICAS" ] && [ "$RUNNING_REPLICAS" != "0" ]; then
                 echo "✅ Deployment successful! $RUNNING_REPLICAS/$DESIRED_REPLICAS replicas running"
@@ -94,24 +131,25 @@ jobs:
             exit 1
           EOF
 
+      # Step 8: Rollback to the previous version if the deployment failed
       - name: Rollback on failure
         if: failure() && steps.verify.outcome == 'failure'
         run: |
           echo "🔄 Rolling back deployment..."
           ssh -p ${{ env.REMOTE_PORT }} ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }} << 'EOF'
-            # Get previous image version (you might want to store this in a file or environment)
-            PREVIOUS_IMAGE=$(docker service inspect academia2025_api --format '{{.PreviousSpec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "${{ env.DOCKER_IMAGE }}:latest")
+            # Inspect the service to find the image of the previous specification
+            PREVIOUS_IMAGE=$(docker service inspect academia2025_api-application --format '{{.PreviousSpec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "${{ env.DOCKER_IMAGE }}:latest")
             
             if [ "$PREVIOUS_IMAGE" != "null" ] && [ "$PREVIOUS_IMAGE" != "" ]; then
               echo "Rolling back to: $PREVIOUS_IMAGE"
-              docker service update --image "$PREVIOUS_IMAGE" academia2025_api
+              docker service update --image "$PREVIOUS_IMAGE" academia2025_api-application
               
-              # Wait for rollback to complete
+              # Wait for the rollback to stabilize
               sleep 30
               
-              # Verify rollback
-              RUNNING_REPLICAS=$(docker service ls --filter name=academia2025_api --format "{{.Replicas}}" | cut -d'/' -f1)
-              DESIRED_REPLICAS=$(docker service ls --filter name=academia2025_api --format "{{.Replicas}}" | cut -d'/' -f2)
+              # Verify the rollback status
+              RUNNING_REPLICAS=$(docker service ls --filter name=academia2025_api-application --format "{{.Replicas}}" | cut -d'/' -f1)
+              DESIRED_REPLICAS=$(docker service ls --filter name=academia2025_api-application --format "{{.Replicas}}" | cut -d'/' -f2)
               
               if [ "$RUNNING_REPLICAS" = "$DESIRED_REPLICAS" ]; then
                 echo "✅ Rollback completed successfully"
@@ -125,6 +163,7 @@ jobs:
             fi
           EOF
 
+      # Step 9: Send a notification to Discord with the job status
       - name: Send Discord notification
         if: always()
         uses: sarisia/actions-status-discord@v1
