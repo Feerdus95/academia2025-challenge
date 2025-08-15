@@ -2,7 +2,6 @@ version: '3.8'
 
 services:
   # --- INFRASTRUCTURE SERVICES ---
-
   nginx:
     image: nginx:1.25-alpine
     ports:
@@ -80,7 +79,6 @@ services:
           memory: 512M
 
   # --- MONITORING SERVICES ---
-
   prometheus:
     image: prom/prometheus:latest
     volumes:
@@ -103,7 +101,7 @@ services:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL}
+      - GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL}  # Ej: https://mutual-excited-mantis.ngrok-free.app/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - GF_SMTP_ENABLED=true
       - GF_SMTP_HOST=${SMTP_HOST}
@@ -204,7 +202,6 @@ services:
         constraints: [node.role == manager]
 
 # --- VOLUMES & NETWORKS ---
-
 volumes:
   postgres_data:
   prometheus_data:
