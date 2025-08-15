@@ -1,6 +1,3 @@
-# docker-compose.prod.yml
-# Versión unificada con las rutas de volumen absolutas y corregidas para el usuario 'deploy'
-
 version: '3.8'
 
 services:
@@ -68,7 +65,6 @@ services:
       - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # RUTA CORREGIDA: Apunta a la ubicación exacta del script de init
       - /home/deploy/postgres/init:/docker-entrypoint-initdb.d
     deploy:
       restart_policy:
@@ -131,6 +127,8 @@ services:
 
   node-exporter:
     image: prom/node-exporter:latest
+    ports:
+      - "9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -147,6 +145,8 @@ services:
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
+    ports:
+      - "8080:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:rw
@@ -186,6 +186,8 @@ services:
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
+    ports:
+      - "9187:9187"
     secrets:
       - postgres_password
     volumes:
@@ -203,6 +205,8 @@ services:
 
   json-exporter:
     image: prometheuscommunity/json-exporter:latest
+    ports:
+      - "7979:7979"
     volumes:
       - /home/deploy/monitoring/json-exporter/config.yml:/config.json
     command:
