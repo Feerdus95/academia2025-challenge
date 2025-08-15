@@ -10,13 +10,14 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     server_name _;
 
     # SSL certificates
-    ssl_certificate /etc/nginx/ssl/fullchain.pem;
-    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+    ssl_certificate /etc/nginx/ssl/nginx-selfsigned.crt;
+    ssl_certificate_key /etc/nginx/ssl/nginx-selfsigned.key;
+    ssl_dhparam /etc/nginx/ssl/dhparam.pem;
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
@@ -62,7 +63,7 @@ server {
         proxy_redirect / /loki/;
     }
 
-    # --- Node Exporter, cAdvisor, Postgres Exporter, JSON Exporter ---
+    # --- Node Exporter ---
     location /node-exporter/ {
         proxy_pass http://node-exporter:9100/;
         proxy_set_header Host $host;
@@ -71,6 +72,8 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_redirect off;
     }
+
+    # --- cAdvisor ---
     location /cadvisor/ {
         proxy_pass http://cadvisor:8080/;
         proxy_set_header Host $host;
@@ -79,6 +82,8 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_redirect off;
     }
+
+    # --- Postgres Exporter ---
     location /postgres-exporter/ {
         proxy_pass http://postgres-exporter:9187/;
         proxy_set_header Host $host;
@@ -87,6 +92,8 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_redirect off;
     }
+
+    # --- JSON Exporter ---
     location /json-exporter/ {
         proxy_pass http://json-exporter:7979/;
         proxy_set_header Host $host;
