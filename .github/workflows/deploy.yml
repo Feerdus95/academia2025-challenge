@@ -82,10 +82,14 @@ jobs:
       - name: Deploy with Docker Swarm
         id: deploy
         run: |
-          # Copy all necessary configuration directories to the remote host, using the correct source paths
-          scp -P ${{ env.REMOTE_PORT }} -r postgres/ ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/
-          scp -P ${{ env.REMOTE_PORT }} -r etc/nginx/ ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/nginx
-          scp -P ${{ env.REMOTE_PORT }} -r monitoring/ ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/
+          # Create the target directories on the remote host first
+          ssh -p ${{ env.REMOTE_PORT }} ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }} "mkdir -p ~/postgres ~/nginx ~/monitoring"
+
+          # Copy the CONTENTS of the local directories into the remote directories
+          # The trailing slash on the source path is crucial (e.g., postgres/)
+          scp -P ${{ env.REMOTE_PORT }} -r postgres/* ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/postgres/
+          scp -P ${{ env.REMOTE_PORT }} -r etc/nginx/* ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/nginx/
+          scp -P ${{ env.REMOTE_PORT }} -r monitoring/* ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/monitoring/
 
           # Copy the main production compose file to the remote server
           scp -P ${{ env.REMOTE_PORT }} docker-compose.prod.yml ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }}:~/
@@ -98,14 +102,14 @@ jobs:
 
           # Connect to the remote server and execute deployment commands
           ssh -p ${{ env.REMOTE_PORT }} ${{ env.REMOTE_USER }}@${{ env.REMOTE_HOST }} << 'EOF'
-            # Pull the latest version of the application image
-            docker pull ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
-            
-            # Source the environment file to load variables into the shell session
-            export $(cat .env.prod | xargs)
-            
-            # Deploy or update the stack, using the compose file and passing registry credentials
-            docker stack deploy -c docker-compose.prod.yml academia2025 --with-registry-auth --prune
+           # Pull the latest version of the application image
+           docker pull ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
+           
+           # Source the environment file to load variables into the shell session
+           export $(cat .env.prod | xargs)
+           
+           # Deploy or update the stack, using the compose file and passing registry credentials
+           docker stack deploy -c docker-compose.prod.yml academia2025 --with-registry-auth --prune
           EOF
 
       # Step 7: Verify that the deployment was successful
