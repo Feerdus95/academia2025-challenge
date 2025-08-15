@@ -122,6 +122,7 @@ services:
       - GF_SMTP_PASSWORD=${SMTP_PASSWORD}
       - GF_SMTP_FROM_ADDRESS=${SMTP_USER}
       - GF_SMTP_FROM_NAME=Novit Monitoring
+      - GF_METRICS_ENABLED=true
     networks:
       - app-net
     deploy:
