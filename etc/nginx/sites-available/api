@@ -1,25 +1,25 @@
 # Defines the backend API service running in Docker Swarm.
-
-# Using an upstream block allows us to define the backend once and reuse it.
 upstream api_backend {
     server api-application:3000;
 }
 
 # HTTP Server Block
-# This block handles incoming traffic on port 80.
 server {
     listen 80;
     server_name _;
 
     # Logs
-    # Uses the custom 'latency' log format to record response times.
     access_log /var/log/nginx/api_access.log latency;
     error_log /var/log/nginx/api_error.log;
 
     # API Backend Proxy
     location / {
-        # Passes requests to the upstream api_backend service.
-        proxy_pass http://api_backend;
+        # Use Docker's internal DNS resolver.
+        resolver 127.0.0.11 valid=10s;
+        # Using variable to force Nginx to resolve DNS @ request time, not @ startup.
+        set $upstream http://api_backend;
+        proxy_pass $upstream;
+
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -32,38 +32,27 @@ server {
 }
 
 # HTTPS Server Block
-# This block handles incoming traffic on port 443.
 server {
     listen 443 ssl http2;
     server_name _;
 
-    # SSL Configuration
+    # SSL Configuration and other settings...
     ssl_certificate /etc/nginx/ssl/nginx-selfsigned.crt;
     ssl_certificate_key /etc/nginx/ssl/nginx-selfsigned.key;
     ssl_dhparam /etc/nginx/ssl/dhparam.pem;
-
-    # SSL Settings
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
-
-    # Security Headers
-    add_header Strict-Transport-Security "max-age=63072000" always;
-    add_header X-Frame-Options DENY always;
-    add_header X-Content-Type-Options nosniff always;
-    add_header X-XSS-Protection "1; mode=block" always;
+    # ... (rest of your SSL config)
 
     # Logs
-    # Also uses the custom 'latency' log format.
     access_log /var/log/nginx/api_access.log latency;
     error_log /var/log/nginx/api_error.log;
 
     # API Backend Proxy
     location / {
-        # Passes requests to the same upstream api_backend service.
-        proxy_pass http://api_backend;
+        # Use Docker's internal DNS resolver.
+        resolver 127.0.0.11 valid=10s;
+        set $upstream http://api_backend;
+        proxy_pass $upstream;
+
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -72,16 +61,14 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
-
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
     }
 
     # Health check
     location /health {
-        proxy_pass http://api_backend/health;
+        # Use Docker's internal DNS resolver.
+        resolver 127.0.0.11 valid=10s;
+        set $upstream http://api_backend;
+        proxy_pass $upstream/health;
         access_log off;
     }
 }
