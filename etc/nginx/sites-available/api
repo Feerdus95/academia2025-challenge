@@ -16,8 +16,7 @@ server {
     server_name _;
 
     # Logs
-    # Uses the custom 'latency' log format to record response times.
-    access_log /var/log/nginx/api_access.log latency;
+    access_log /var/log/nginx/api_access.log;
     error_log /var/log/nginx/api_error.log;
 
     # API Backend Proxy
@@ -58,7 +57,7 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
 
     # Logs
-    access_log /var/log/nginx/api_access.log latency;
+    access_log /var/log/nginx/api_access.log;
     error_log /var/log/nginx/api_error.log;
 
     # API Backend Proxy
