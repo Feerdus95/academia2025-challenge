@@ -94,27 +94,27 @@ scrape_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
     relabel_configs:
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/json-exporter'
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/json-exporter"
         target_label: job
-        replacement: 'json-exporter'
+        replacement: "json-exporter"
     pipeline_stages:
       - logfmt:
           mapping:
             level: level
             msg: msg
 
-    # API Application logs (when containerized)
+  # API Application logs (when containerized)
   - job_name: api-application
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
     relabel_configs:
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/?(api-.*|.*api.*)'
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/?(api-.*|.*api.*)"
         target_label: job
-        replacement: 'api-application'
-      - source_labels: ['__meta_docker_container_name']
+        replacement: "api-application"
+      - source_labels: ["__meta_docker_container_name"]
         target_label: container_name
     pipeline_stages:
       - json:
@@ -142,102 +142,3 @@ scrape_configs:
       - timestamp:
           source: timestamp
           format: RFC3339
-
-  # PostgreSQL logs
-  - job_name: postgres-logs
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-    relabel_configs:
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/postgres.*'
-        target_label: __service__
-      - source_labels: ['__meta_docker_container_name']
-        target_label: container_name
-      - source_labels: [__service__]
-        target_label: job
-        replacement: 'postgres'
-    pipeline_stages:
-      - regex:
-          expression: '(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.\d{3}) (?P<timezone>\w+) \[(?P<pid>\d+)\] (?P<level>\w+):\s+(?P<message>.*)'
-      - labels:
-          level:
-          pid:
-      - timestamp:
-          source: timestamp
-          format: '2006-01-02 15:04:05.000'
-
-  # Grafana logs
-  - job_name: grafana-logs
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-    relabel_configs:
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/grafana.*'
-        target_label: __service__
-      - source_labels: ['__meta_docker_container_name']
-        target_label: container_name
-      - source_labels: [__service__]
-        target_label: job
-        replacement: 'grafana'
-
-  # Prometheus logs
-  - job_name: prometheus-logs
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-    relabel_configs:
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/prometheus.*'
-        target_label: __service__
-      - source_labels: ['__meta_docker_container_name']
-        target_label: container_name
-      - source_labels: [__service__]
-        target_label: job
-        replacement: 'prometheus'
-
-  # API Application logs from files
-  - job_name: api-application-files
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: api-application
-          host: academia-novit
-          service: api-prod
-          __path__: /opt/docker/monitoring/api-logs/*.log
-    pipeline_stages:
-      # Format parsing: "2025-08-11 10:45:20 [HTTP]: HTTP Request | {json}"
-      - regex:
-          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})
-$$
-(?P<level>\w+)
-$$: (?P<message>[^|]+) \| (?P<json_data>\{.*\})'
-      # Parsear el JSON
-      - json:
-          source: json_data
-          expressions:
-            service: service
-            method: method
-            url: url
-            statusCode: statusCode
-            duration: duration
-            ip: ip
-            userId: userId
-            type: type
-      # Crear labels para filtrar
-      - labels:
-          level:
-          method:
-          statusCode:
-          type:
-      # Usar timestamp del log
-      - timestamp:
-          source: timestamp
-          format: '2006-01-02 15:04:05'
-
-# Limits to prevent excessive resource usage
-limits_config:
-  readline_rate: 10000
-  readline_burst: 20000
