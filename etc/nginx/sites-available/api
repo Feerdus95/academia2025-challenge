@@ -2,11 +2,11 @@
 resolver 127.0.0.11 valid=10s ipv6=off;
 
 # Defines the backend API service running in Docker Swarm.
-# Using "resolve" ensures hostname resolution happens at runtime, preventing startup failures.
-# The "zone" directive allows sharing the upstream definition between worker processes.
+# Removed "resolve" parameter as it requires nginx-plus
+# The resolver directive above handles DNS resolution
 upstream api_backend {
     zone api_backend 64k;
-    server api-application:3000 resolve;
+    server api-application:3000;
 }
 
 # HTTP Server Block
@@ -21,7 +21,9 @@ server {
 
     # API Backend Proxy
     location / {
-        proxy_pass http://api_backend;
+        # Set the Host header for dynamic resolution
+        set $backend "api-application";
+        proxy_pass http://$backend:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -62,7 +64,9 @@ server {
 
     # API Backend Proxy
     location / {
-        proxy_pass http://api_backend;
+        # Set the Host header for dynamic resolution
+        set $backend "api-application";
+        proxy_pass http://$backend:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -80,7 +84,8 @@ server {
 
     # Health check
     location /health {
-        proxy_pass http://api_backend/health;
+        set $backend "api-application";
+        proxy_pass http://$backend:3000/health;
         access_log off;
     }
 }
