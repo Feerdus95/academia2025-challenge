@@ -83,8 +83,6 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
     volumes:
       - /home/deploy/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - /home/deploy/monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml
@@ -101,16 +99,11 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    ports:
-      - "3001:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - /home/deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL}
+      - GF_SERVER_ROOT_URL=https://${NGROK_DOMAIN}/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - GF_SMTP_ENABLED=true
       - GF_SMTP_HOST=${SMTP_HOST}
@@ -119,6 +112,9 @@ services:
       - GF_SMTP_FROM_ADDRESS=${SMTP_USER}
       - GF_SMTP_FROM_NAME=Novit Monitoring
       - GF_METRICS_ENABLED=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - /home/deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning
     networks:
       - app-net
     deploy:
@@ -127,8 +123,6 @@ services:
 
   node-exporter:
     image: prom/node-exporter:latest
-    ports:
-      - "9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -145,8 +139,6 @@ services:
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
-    ports:
-      - "8080:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:rw
@@ -159,8 +151,6 @@ services:
 
   loki:
     image: grafana/loki:latest
-    ports:
-      - "3100:3100"
     volumes:
       - /home/deploy/monitoring/loki/loki.yml:/etc/loki/local-config.yaml
       - loki_data:/loki
@@ -186,8 +176,6 @@ services:
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
-    ports:
-      - "9187:9187"
     secrets:
       - postgres_password
     volumes:
@@ -205,8 +193,6 @@ services:
 
   json-exporter:
     image: prometheuscommunity/json-exporter:latest
-    ports:
-      - "7979:7979"
     volumes:
       - /home/deploy/monitoring/json-exporter/config.yml:/config.json
     command:
