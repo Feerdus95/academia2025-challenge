@@ -135,6 +135,9 @@ server {
 
     # --- Grafana Proxy (HTTPS) ---
     location /grafana/ {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
         proxy_pass http://grafana_backend;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -147,8 +150,7 @@ server {
 
     # --- Prometheus Proxy (HTTPS) ---
     location /prometheus/ {
-        resolver 127.0.0.11 valid=10s;
-        proxy_pass http://prometheus_backend;
+        proxy_pass http://prometheus_backend/;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
