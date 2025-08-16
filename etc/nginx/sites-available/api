@@ -1,105 +1,93 @@
-# Nginx reverse proxy configuration for Academia Novit Challenge
+# Defines upstreams for all backend services for cleaner configuration
+upstream api_backend {
+    server api-application:3000;
+}
+upstream grafana_backend {
+    server grafana:3000;
+}
+upstream prometheus_backend {
+    server prometheus:9090;
+}
+# Add other upstreams here if you need to expose more services (loki, etc.)
 
+# HTTP server block: Redirects all HTTP traffic to HTTPS
 server {
     listen 80;
-    listen [::]:80;
     server_name _;
 
-    # Redirect all HTTP traffic to HTTPS
-    return 301 https://$host$request_uri;
+    # This ensures that requests coming from ngrok (which are already HTTPS)
+    # are not caught in a redirect loop.
+    if ($http_x_forwarded_proto != "https") {
+        return 301 https://$host$request_uri;
+    }
+
+    # If the request is already HTTPS, pass it to the API
+    location / {
+        proxy_pass http://api_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
 }
 
+# Main HTTPS Server Block
+# All traffic from your ngrok static domain will land here.
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    listen 443 ssl http2;
     server_name _;
 
-    # SSL certificates
+    # Logs
+    access_log /var/log/nginx/api_access.log latency;
+    error_log /var/log/nginx/api_error.log;
+
+    # SSL Configuration (using your self-signed certificates)
     ssl_certificate /etc/nginx/ssl/nginx-selfsigned.crt;
     ssl_certificate_key /etc/nginx/ssl/nginx-selfsigned.key;
     ssl_dhparam /etc/nginx/ssl/dhparam.pem;
 
+    # SSL Settings
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
 
-    # --- API application ---
-    location /api/ {
-        proxy_pass http://api-application:3000/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
-    }
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header X-Frame-Options DENY always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-XSS-Protection "1; mode=block" always;
 
-    # --- Prometheus ---
-    location /prometheus/ {
-        proxy_pass http://prometheus:9090/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect / /prometheus/;
-    }
-
-    # --- Grafana ---
+    # --- Grafana Proxy ---
+    # Access Grafana at https://mutual-excited-mantis.ngrok-free.app/grafana/
     location /grafana/ {
-        proxy_pass http://grafana:3000/;
+        rewrite ^/grafana/(.*)$ /$1 break;
+        proxy_pass http://grafana_backend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Prefix /grafana;
-        proxy_redirect / /grafana/;
     }
 
-    # --- Loki ---
-    location /loki/ {
-        proxy_pass http://loki:3100/;
+    # --- Prometheus Proxy ---
+    # Access Prometheus at https://mutual-excited-mantis.ngrok-free.app/prometheus/
+    location /prometheus/ {
+        proxy_pass http://prometheus_backend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect / /loki/;
     }
 
-    # --- Node Exporter ---
-    location /node-exporter/ {
-        proxy_pass http://node-exporter:9100/;
+    # --- API Proxy (Main Location) ---
+    # All other requests (e.g., /api/users) will be sent to the API
+    location / {
+        resolver 127.0.0.11 valid=10s;
+        set $upstream_api http://api_backend;
+        proxy_pass $upstream_api;
+        
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
-    }
-
-    # --- cAdvisor ---
-    location /cadvisor/ {
-        proxy_pass http://cadvisor:8080/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
-    }
-
-    # --- Postgres Exporter ---
-    location /postgres-exporter/ {
-        proxy_pass http://postgres-exporter:9187/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
-    }
-
-    # --- JSON Exporter ---
-    location /json-exporter/ {
-        proxy_pass http://json-exporter:7979/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
     }
 }
