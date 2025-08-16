@@ -1,51 +1,126 @@
 # Defines upstreams for all backend services for cleaner configuration
 upstream api_backend {
-    server api-application:3000;
+    server academia2025_api-application:3000;
 }
 upstream grafana_backend {
-    server grafana:3000;
+    server academia2025_grafana:3000;
 }
 upstream prometheus_backend {
-    server prometheus:9090;
+    server academia2025_prometheus:9090;
 }
 upstream loki_backend {
-    server loki:3100;
+    server academia2025_loki:3100;
 }
 upstream cadvisor_backend {
-    server cadvisor:8080;
+    server academia2025_cadvisor:8080;
 }
 upstream node_exporter_backend {
-    server node-exporter:9100;
+    server academia2025_node-exporter:9100;
 }
 upstream postgres_exporter_backend {
-    server postgres-exporter:9187;
+    server academia2025_postgres-exporter:9187;
 }
 upstream json_exporter_backend {
-    server json-exporter:7979;
+    server academia2025_json-exporter:7979;
 }
 
-# HTTP server block: Redirects all HTTP traffic to HTTPS
+# HTTP Server Block
 server {
     listen 80;
     server_name _;
+    access_log /var/log/nginx/api_access.log latency;
+    error_log /var/log/nginx/api_error.log;
 
-    # This ensures that requests coming from ngrok (which are already HTTPS)
-    # are not caught in a redirect loop.
-    if ($http_x_forwarded_proto != "https") {
-        return 301 https://$host$request_uri;
-    }
-
-    # If the request is already HTTPS (from ngrok), pass it to the main proxy
-    location / {
-        proxy_pass http://localhost:443; # Internal pass to the HTTPS block
-        proxy_set_header Host $host;
+    # --- Grafana Proxy (HTTP) ---
+    location /grafana/ {
+        resolver 127.0.0.11 valid=10s;
+        rewrite ^/grafana/(.*)$ /$1 break;
+        proxy_pass http://grafana_backend/;
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_redirect off;
+        proxy_buffering off;
+    }
+
+    # --- Prometheus Proxy (HTTP) ---
+    location /prometheus/ {
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://prometheus_backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    }
+
+    # --- Loki Proxy (HTTP) ---
+    location /loki/ {
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://loki_backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    }
+    
+    # --- cAdvisor Proxy (HTTP) ---
+    location /cadvisor/ {
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://cadvisor_backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    }
+
+    # --- Exporters Proxies (HTTP) ---
+    location /node-exporter/ {
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://node_exporter_backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    }
+    
+    location /postgres-exporter/ {
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://postgres_exporter_backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    }
+    
+    location /json-exporter/ {
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://json_exporter_backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    }
+
+    # --- API Proxy (Main Location HTTP) ---
+    location / {
+        resolver 127.0.0.11 valid=10s;
+        set $upstream_api http://api_backend;
+        proxy_pass $upstream_api;
+        
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Host $http_host;
+    }
+
+    # Health check endpoint
+    location /health {
+        resolver 127.0.0.11 valid=10s;
+        set $upstream_api http://api_backend;
+        proxy_pass $upstream_api/health;
+        access_log off;
     }
 }
 
-# Main HTTPS Server Block
-# All traffic from your ngrok static domain will land here.
+# HTTPS Server Block
 server {
     listen 443 ssl http2;
     server_name _;
@@ -54,15 +129,17 @@ server {
     access_log /var/log/nginx/api_access.log latency;
     error_log /var/log/nginx/api_error.log;
 
-    # SSL Configuration (using your self-signed certificates)
+    # SSL Configuration
     ssl_certificate /etc/nginx/ssl/nginx-selfsigned.crt;
     ssl_certificate_key /etc/nginx/ssl/nginx-selfsigned.key;
     ssl_dhparam /etc/nginx/ssl/dhparam.pem;
 
     # SSL Settings
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
 
     # Security Headers
     add_header Strict-Transport-Security "max-age=63072000" always;
@@ -70,50 +147,91 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header X-XSS-Protection "1; mode=block" always;
 
-    # --- Grafana Proxy ---
+    # --- Grafana Proxy (HTTPS) ---
     location /grafana/ {
+        resolver 127.0.0.11 valid=10s;
         rewrite ^/grafana/(.*)$ /$1 break;
         proxy_pass http://grafana_backend/;
-        proxy_set_header Host $host;
-        proxy_redirect default;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_redirect off;
+        proxy_buffering off;
     }
 
-    # --- Prometheus Proxy ---
+    # --- Prometheus Proxy (HTTPS) ---
     location /prometheus/ {
+        resolver 127.0.0.11 valid=10s;
         proxy_pass http://prometheus_backend;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
     }
 
-    # --- Loki Proxy ---
+    # --- Loki Proxy (HTTPS) ---
     location /loki/ {
+        resolver 127.0.0.11 valid=10s;
         proxy_pass http://loki_backend;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
     }
     
-    # --- cAdvisor Proxy ---
+    # --- cAdvisor Proxy (HTTPS) ---
     location /cadvisor/ {
+        resolver 127.0.0.11 valid=10s;
         proxy_pass http://cadvisor_backend;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
     }
 
-    # --- Exporters Proxies ---
-    location /node-exporter/ { proxy_pass http://node_exporter_backend; }
-    location /postgres-exporter/ { proxy_pass http://postgres_exporter_backend; }
-    location /json-exporter/ { proxy_pass http://json_exporter_backend; }
+    # --- Exporters Proxies (HTTPS) ---
+    location /node-exporter/ {
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://node_exporter_backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+    
+    location /postgres-exporter/ {
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://postgres_exporter_backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+    
+    location /json-exporter/ {
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://json_exporter_backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
 
-    # --- API Proxy (Main Location) ---
-    # All other requests (e.g., /api/users) will be sent to the API
+    # --- API Proxy (Main Location HTTPS) ---
     location / {
         resolver 127.0.0.11 valid=10s;
         set $upstream_api http://api_backend;
         proxy_pass $upstream_api;
         
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $http_host;
+    }
+
+    # Health check endpoint
+    location /health {
+        resolver 127.0.0.11 valid=10s;
+        set $upstream_api http://api_backend;
+        proxy_pass $upstream_api/health;
+        access_log off;
     }
 }
