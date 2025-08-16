@@ -8,7 +8,21 @@ upstream grafana_backend {
 upstream prometheus_backend {
     server prometheus:9090;
 }
-# Add other upstreams here if you need to expose more services (loki, etc.)
+upstream loki_backend {
+    server loki:3100;
+}
+upstream cadvisor_backend {
+    server cadvisor:8080;
+}
+upstream node_exporter_backend {
+    server node-exporter:9100;
+}
+upstream postgres_exporter_backend {
+    server postgres-exporter:9187;
+}
+upstream json_exporter_backend {
+    server json-exporter:7979;
+}
 
 # HTTP server block: Redirects all HTTP traffic to HTTPS
 server {
@@ -21,9 +35,9 @@ server {
         return 301 https://$host$request_uri;
     }
 
-    # If the request is already HTTPS, pass it to the API
+    # If the request is already HTTPS (from ngrok), pass it to the main proxy
     location / {
-        proxy_pass http://api_backend;
+        proxy_pass http://localhost:443; # Internal pass to the HTTPS block
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -57,24 +71,35 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
 
     # --- Grafana Proxy ---
-    # Access Grafana at https://mutual-excited-mantis.ngrok-free.app/grafana/
     location /grafana/ {
         rewrite ^/grafana/(.*)$ /$1 break;
         proxy_pass http://grafana_backend;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_redirect default;
     }
 
     # --- Prometheus Proxy ---
-    # Access Prometheus at https://mutual-excited-mantis.ngrok-free.app/prometheus/
     location /prometheus/ {
         proxy_pass http://prometheus_backend;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
+
+    # --- Loki Proxy ---
+    location /loki/ {
+        proxy_pass http://loki_backend;
+        proxy_set_header Host $host;
+    }
+    
+    # --- cAdvisor Proxy ---
+    location /cadvisor/ {
+        proxy_pass http://cadvisor_backend;
+        proxy_set_header Host $host;
+    }
+
+    # --- Exporters Proxies ---
+    location /node-exporter/ { proxy_pass http://node_exporter_backend; }
+    location /postgres-exporter/ { proxy_pass http://postgres_exporter_backend; }
+    location /json-exporter/ { proxy_pass http://json_exporter_backend; }
 
     # --- API Proxy (Main Location) ---
     # All other requests (e.g., /api/users) will be sent to the API
