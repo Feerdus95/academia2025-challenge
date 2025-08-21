@@ -183,7 +183,7 @@ services:
     volumes:
       - /home/deploy/monitoring/postgres-exporter/queries.yml:/etc/postgres-exporter/queries.yml
     environment:
-      - DATA_SOURCE_NAME=postgresql://postgres:$$(cat /run/secrets/postgres_password)@postgres:5432/academia2025_prod?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://api_user:$$(cat /run/secrets/postgres_password)@postgres:5432/academia2025_prod?sslmode=disable
     command:
       - --extend.query-path=/etc/postgres-exporter/queries.yml
     networks:
