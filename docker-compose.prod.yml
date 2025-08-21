@@ -184,8 +184,7 @@ services:
     command:
       - --extend.query-path=/etc/postgres-exporter/queries.yml
     environment:
-      - DATA_SOURCE_NAME=postgresql://postgres:@postgres:5432/academia2025_prod?sslmode=disable
-      - PG_EXPORTER_PASSWORD_FILE=/run/secrets/postgres_password
+      - DATA_SOURCE_NAME=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/academia2025_prod?sslmode=disable
     networks:
       - app-net
     deploy:
