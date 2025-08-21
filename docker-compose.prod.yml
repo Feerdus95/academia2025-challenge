@@ -32,22 +32,28 @@ services:
       - DB_PASSWORD_FILE=/run/secrets/postgres_password
       - PORT=3000
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', {timeout: 5000}, (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     deploy:
       replicas: 2
       update_config:
         parallelism: 1
+        delay: 20s
+      rollback_config:
+        parallelism: 1
         delay: 10s
       restart_policy:
         condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
       resources:
         limits:
-          cpus: '0.50'
-          memory: 512M
+          cpus: '0.75'
+          memory: 768M
         reservations:
           cpus: '0.25'
           memory: 256M
