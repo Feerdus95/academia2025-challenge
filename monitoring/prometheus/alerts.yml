@@ -3,27 +3,60 @@ groups:
   # API Performance Alerts
   - name: api_performance
     rules:
-      # API response time > 2 segundos
+      # API health status down
+      - alert: APIDown
+        expr: api_health_status{service="api-prod"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "API is down"
+          description: "API health status is unhealthy for more than 1 minute."
+
+      # API response time > 2 segundos (via health check)
       - alert: APIHighResponseTime
-        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="api-application"}[5m])) by (le)) > 2
+        expr: api_health_response_time_seconds{service="api-prod"} > 2
         for: 5m
         labels:
           severity: warning
           component: api
         annotations:
           summary: "API response time is too high"
-          description: "API 95th percentile response time is {{ $value }}s for more than 5 minutes."
+          description: "API health check response time is {{ $value }}s for more than 5 minutes."
 
-      # Error rate > 5% en 5 minutos
-      - alert: APIHighErrorRate
-        expr: (sum(rate(http_requests_total{job="api-application",code=~"5.."}[5m])) / sum(rate(http_requests_total{job="api-application"}[5m]))) * 100 > 5
+      # API memory usage > 90%
+      - alert: APIHighMemoryUsage
+        expr: api_memory_percentage{service="api-prod"} > 90
         for: 5m
         labels:
-          severity: critical
+          severity: warning
           component: api
         annotations:
-          summary: "High API error rate detected"
-          description: "API error rate is {{ $value }}% for more than 5 minutes."
+          summary: "API memory usage is high"
+          description: "API memory usage is {{ $value }}% for more than 5 minutes."
+
+      # Database connection down
+      - alert: DatabaseConnectionDown
+        expr: api_database_status{service="api-prod"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection is down"
+          description: "API cannot connect to the database for more than 1 minute."
+
+      # Database response time > 1 segundo
+      - alert: DatabaseHighResponseTime
+        expr: api_database_response_time_seconds{service="api-prod"} > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database response time is high"
+          description: "Database response time is {{ $value }}s for more than 5 minutes."
 
   # System Resource Alerts
   - name: system_resources
@@ -86,30 +119,30 @@ groups:
           summary: "PostgreSQL is down"
           description: "PostgreSQL database is not responding."
 
-  # Security Alerts
+  # Security Alerts (based on available metrics)
   - name: security
     rules:
-      # Failed logins > 10 en 5 minutos
-      - alert: HighFailedLogins
-        expr: increase(http_requests_total{job="api-application",endpoint="/auth/login",code="401"}[5m]) > 10
+      # API uptime monitoring (if uptime drops, could indicate restarts)
+      - alert: APIUptimeAnomaly
+        expr: api_uptime_seconds{service="api-prod"} < 300
+        for: 2m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "API uptime anomaly detected"
+          description: "API uptime is {{ $value }}s, indicating recent restart or instability."
+
+      # Environment mismatch (security check)
+      - alert: EnvironmentMismatch
+        expr: api_environment_info{service="api-prod",environment="production"} != 1
         for: 1m
         labels:
           severity: warning
           component: security
         annotations:
-          summary: "High number of failed login attempts"
-          description: "{{ $value }} failed login attempts detected in the last 5 minutes."
-
-      # High 4xx error rate
-      - alert: High4xxErrorRate
-        expr: (sum(rate(http_requests_total{job="api-application",code=~"4.."}[5m])) / sum(rate(http_requests_total{job="api-application"}[5m]))) * 100 > 10
-        for: 5m
-        labels:
-          severity: warning
-          component: security
-        annotations:
-          summary: "High 4xx error rate"
-          description: "4xx error rate is {{ $value }}% for more than 5 minutes."
+          summary: "Environment mismatch detected"
+          description: "API is not running in production environment."
 
   # Container and Docker Alerts
   - name: containers
@@ -160,3 +193,50 @@ groups:
         annotations:
           summary: "High network traffic"
           description: "Network traffic on {{ $labels.instance }} {{ $labels.device }} is {{ $value }} bytes/s."
+
+  # Monitoring Stack Alerts
+  - name: monitoring
+    rules:
+      # Prometheus down
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} != 1
+        for: 1m
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: "Prometheus is down"
+          description: "Prometheus monitoring system is not responding."
+
+      # Grafana down
+      - alert: GrafanaDown
+        expr: up{job="grafana"} != 1
+        for: 1m
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: "Grafana is down"
+          description: "Grafana dashboard system is not responding."
+
+      # Loki down
+      - alert: LokiDown
+        expr: up{job="loki"} != 1
+        for: 1m
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: "Loki is down"
+          description: "Loki log aggregation system is not responding."
+
+      # JSON Exporter down
+      - alert: JSONExporterDown
+        expr: up{job="api-prod"} != 1
+        for: 1m
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: "JSON Exporter is down"
+          description: "API metrics exporter is not responding."

@@ -46,7 +46,7 @@ scrape_configs:
     scrape_interval: 30s
     metrics_path: /metrics
 
-  # API Application
+  # API Application - Via JSON Exporter
   - job_name: "api-prod"
     params:
       module: ["health-module"]

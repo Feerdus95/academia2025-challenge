@@ -1,10 +1,81 @@
-# Json Exporter configuration for API health
+# Json Exporter configuration for API health metrics
 modules:
   health-module:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      method: GET
+      headers:
+        User-Agent: "Prometheus/JsonExporter"
     metrics:
+      # Health status (1=healthy, 0=unhealthy)
       - name: api_health_status
         path: "{.status}"
-        help: "API health status (1=ok, 0=fail)"
+        help: "API health status (1=healthy, 0=unhealthy)"
         type: gauge
         labels:
           service: api-prod
+          endpoint: health
+      
+      # Uptime in seconds
+      - name: api_uptime_seconds
+        path: "{.uptime}"
+        help: "API uptime in seconds"
+        type: gauge
+        labels:
+          service: api-prod
+      
+      # Database connection status
+      - name: api_database_status
+        path: "{.services.database.status}"
+        help: "Database connection status (1=connected, 0=disconnected)"
+        type: gauge
+        labels:
+          service: api-prod
+          component: database
+      
+      # Database response time
+      - name: api_database_response_time_seconds
+        path: "{.services.database.responseTime}"
+        help: "Database response time in seconds"
+        type: gauge
+        labels:
+          service: api-prod
+          component: database
+      
+      # Memory usage
+      - name: api_memory_usage_bytes
+        path: "{.system.memory.used}"
+        help: "API memory usage in bytes"
+        type: gauge
+        labels:
+          service: api-prod
+          component: memory
+      
+      # Memory percentage
+      - name: api_memory_percentage
+        path: "{.system.memory.percentage}"
+        help: "API memory usage percentage"
+        type: gauge
+        labels:
+          service: api-prod
+          component: memory
+      
+      # Response time of health check
+      - name: api_health_response_time_seconds
+        path: "{.responseTime}"
+        help: "Health check response time in seconds"
+        type: gauge
+        labels:
+          service: api-prod
+          endpoint: health
+      
+      # Environment info
+      - name: api_environment_info
+        path: "{.environment}"
+        help: "API environment information"
+        type: gauge
+        labels:
+          service: api-prod
+          environment: "production"
