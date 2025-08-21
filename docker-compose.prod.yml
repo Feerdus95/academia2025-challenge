@@ -21,17 +21,24 @@ services:
     image: feerdus95/academia2025-challenge:latest
     networks:
       - app-net
+    depends_on:
+      - postgres
     secrets:
-      - postgres_password
+      - source: postgres_password
+        target: postgres_password
+        mode: 0444
     environment:
       - NODE_ENV=production
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=academia2025_prod
       - DB_USER=postgres
-      - DB_PASSWORD=$$(cat /run/secrets/postgres_password)
-      - POSTGRES_PASSWORD=$$(cat /run/secrets/postgres_password)
+      - DB_PASSWORD_FILE=/run/secrets/postgres_password
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
       - PORT=3000
+    volumes:
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', {timeout: 5000}, (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
@@ -61,23 +68,30 @@ services:
 
   postgres:
     image: postgres:15-alpine
-    networks:
-      - app-net
-    secrets:
-      - postgres_password
-    environment:
-      - POSTGRES_DB=academia2025_prod
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=$$(cat /run/secrets/postgres_password)
-      - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
+    environment:
+      - POSTGRES_DB=academia2025_prod
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+      - PGPASSWORD_FILE=/run/secrets/postgres_password  # For init scripts
+      - POSTGRES_INITDB_ARGS=--data-checksums
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    secrets:
+      - source: postgres_password
+        target: postgres_password
+        mode: 0444
+    networks:
+      - app-net
     deploy:
-      restart_policy:
-        condition: on-failure
       placement:
         constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s
       resources:
         limits:
           cpus: '1.0'

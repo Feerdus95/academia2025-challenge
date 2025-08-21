@@ -1,12 +1,26 @@
 import { Pool } from 'pg';
 
 // Configuración de la base de datos PostgreSQL
+const readPassword = () => {
+  if (process.env.DB_PASSWORD_FILE) {
+    try {
+      const fs = require('fs');
+      return fs.readFileSync(process.env.DB_PASSWORD_FILE, 'utf8').trim();
+    } catch (err) {
+      console.error('Error reading password file:', err);
+      return 'postgres';
+    }
+  }
+  return process.env.DB_PASSWORD || 'postgres';
+};
+
 const DB_CONFIG = {
   user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'challege_api',
-  password: process.env.DB_PASSWORD || 'postgres',
+  database: process.env.DB_NAME || 'academia2025_prod',
+  password: readPassword(),
   port: parseInt(process.env.DB_PORT || '5432'),
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 };
 
 export class Database {
