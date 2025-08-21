@@ -61,6 +61,13 @@ RUN npm install --omit=dev
 # Copiar los artefactos de compilación desde la etapa anterior
 COPY --from=builder /usr/src/app/dist ./dist
 
+# Copiar el script de entrypoint
+COPY monitoring/scripts/entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Instalar postgres-client para el healthcheck
+RUN apk add --no-cache postgresql-client
+
 # Asignar la propiedad de los archivos al usuario no-root
 RUN chown -R appuser:appgroup /usr/src/app
 
@@ -73,6 +80,9 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Exponer el puerto de la aplicación
 EXPOSE 3000
+
+# Usar el entrypoint para la inicialización
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # Comando para iniciar la aplicación
 CMD ["node", "dist/app.js"]
