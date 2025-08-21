@@ -28,7 +28,7 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=academia2025_prod
-      - DB_USER=postgres
+      - DB_USER=api_user
       - DB_PASSWORD_FILE=/run/secrets/postgres_password
       - PORT=3000
     healthcheck:
